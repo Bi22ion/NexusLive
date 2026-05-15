@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Coins, Gem, Plus } from "lucide-react";
+ import { Coins, Gem, Plus, Smartphone, QrCode, ArrowLeft, Loader2 } from "lucide-react";
+import Image from "next/image"; // Needed for your QR code image
 import { toast } from "sonner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -118,34 +119,37 @@ export function WalletHeader() {
 }) {
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const [amount, setAmount] = React.useState<number | string>(250);
-  const [step, setStep] = React.useState<'select_amount' | 'select_method'>('select_amount');
+  // Steps: select_amount -> select_method -> (momo_input OR qr_display) -> processing
+  const [step, setStep] = React.useState<'select_amount' | 'select_method' | 'momo_input' | 'qr_display' | 'processing'>('select_amount');
+  const [phone, setPhone] = React.useState("");
   const [saving, setSaving] = React.useState(false);
 
   const finalAmount = Number(amount) || 0;
+  const adminNumber = "+256708109280"; // Your Airtel Revenue Number
 
-  // Handles the actual final "payment" processing
-  const processPayment = async (method: string) => {
+  const handleFinalizePayment = async (method: string) => {
     if (!supabase) return;
     setSaving(true);
+    setStep('processing');
     
     try {
-      // In a production environment, this is where you would call 
-      // Stripe, Flutterwave (for Mobile Money), or PayPal APIs.
       const { data: auth } = await supabase.auth.getUser();
       const uid = auth.user?.id;
 
-      // We log the transaction officially
+      // 1. Record the transaction in the database
       const { error: txError } = await supabase
         .from("token_transactions")
         .insert({
           amount: finalAmount,
           user_id: uid || null,
           payment_method: method,
-          status: 'completed'
+          status: 'completed',
+          transaction_ref: method === 'Mobile Money' ? phone : 'QR_SCAN'
         });
 
       if (txError) throw txError;
 
+      // 2. Update user wallet if logged in
       if (uid) {
         const { data: profile } = await supabase
           .from("profiles")
@@ -160,12 +164,13 @@ export function WalletHeader() {
           .eq("id", uid);
       }
 
-      toast.success(`Success! ${finalAmount} tokens added via ${method}.`);
+      toast.success(`Success! ${finalAmount} tokens added.`);
       onSuccess(finalAmount);
       onClose();
     } catch (e) {
       console.error(e);
-      toast.error("Payment provider rejected the transaction.");
+      toast.error("Payment failed to verify.");
+      setStep('select_method');
     } finally {
       setSaving(false);
     }
@@ -173,23 +178,30 @@ export function WalletHeader() {
 
   return (
     <div 
-      className="fixed inset-0 z-[9999] flex justify-center bg-black/60 backdrop-blur-sm p-4 pt-20"
+      className="fixed inset-0 z-[9999] flex justify-center bg-black/80 backdrop-blur-md p-4 pt-20"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div 
         className="w-full max-w-md h-fit rounded-3xl bg-white dark:bg-zinc-950 border border-white/10 p-6 shadow-2xl animate-in fade-in zoom-in duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-6">
+        {/* Header with Back Button */}
+        <div className="flex items-center gap-3 mb-6">
+          {step !== 'select_amount' && (
+            <button 
+              onClick={() => setStep(step === 'processing' ? 'select_method' : 'select_method')}
+              className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+          )}
           <h3 className="text-xl font-bold text-zinc-900 dark:text-white">
-            {step === 'select_amount' ? 'Refill Tokens' : 'Secure Checkout'}
+            {step === 'select_amount' ? 'Refill Tokens' : 'Payment Details'}
           </h3>
-          <button onClick={onClose} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full">
-            <span className="text-xl text-zinc-500">✕</span>
-          </button>
         </div>
 
-        {step === 'select_amount' ? (
+        {/* STEP 1: Select Amount */}
+        {step === 'select_amount' && (
           <div className="space-y-6">
             <div className="grid grid-cols-3 gap-3">
               {[100, 250, 500].map((v) => (
@@ -204,51 +216,115 @@ export function WalletHeader() {
                 </button>
               ))}
             </div>
-            
             <input 
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               className="w-full bg-zinc-100 dark:bg-zinc-900 rounded-2xl py-4 px-4 font-bold text-lg outline-none focus:ring-2 focus:ring-violet-500"
-              placeholder="Custom amount"
+              placeholder="Enter amount"
             />
-
             <button
-              className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-cyan-500 py-4 font-black text-white uppercase tracking-widest"
+              className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-cyan-500 py-4 font-black text-white uppercase tracking-widest hover:opacity-90 transition-all disabled:opacity-50"
               onClick={() => setStep('select_method')}
               disabled={finalAmount <= 0}
             >
-              Continue to Payment
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <p className="text-sm text-zinc-500 mb-4 text-center">Total Amount: <span className="text-zinc-900 dark:text-white font-bold">{finalAmount} Tokens</span></p>
-            
-            {[
-              { id: 'mobile_money', label: 'Mobile Money', color: 'bg-yellow-500' },
-              { id: 'card', label: 'Credit / Debit Card', color: 'bg-blue-600' },
-              { id: 'paypal', label: 'PayPal', color: 'bg-blue-800' }
-            ].map((method) => (
-              <button
-                key={method.id}
-                disabled={saving}
-                className={`w-full flex items-center justify-between p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors disabled:opacity-50`}
-                onClick={() => processPayment(method.label)}
-              >
-                <span className="font-bold">{method.label}</span>
-                <div className={`w-3 h-3 rounded-full ${method.color}`} />
-              </button>
-            ))}
-
-            <button 
-              className="w-full text-zinc-500 text-xs font-bold uppercase mt-4"
-              onClick={() => setStep('select_amount')}
-            >
-              ← Back to Amount
+              CONTINUE
             </button>
           </div>
         )}
+
+        {/* STEP 2: Select Method */}
+        {step === 'select_method' && (
+          <div className="space-y-3">
+            <button
+              className="w-full flex items-center justify-between p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
+              onClick={() => setStep('momo_input')}
+            >
+              <div className="flex items-center gap-4">
+                <Smartphone className="text-yellow-500" />
+                <div className="text-left">
+                  <p className="font-bold">Mobile Money</p>
+                  <p className="text-[10px] text-zinc-500 uppercase">Airtel & MTN Uganda</p>
+                </div>
+              </div>
+            </button>
+
+            <button
+              className="w-full flex items-center justify-between p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
+              onClick={() => setStep('qr_display')}
+            >
+              <div className="flex items-center gap-4">
+                <QrCode className="text-violet-500" />
+                <div className="text-left">
+                  <p className="font-bold">Scan QR Code</p>
+                  <p className="text-[10px] text-zinc-500 uppercase">Instant Merchant Pay</p>
+                </div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* STEP 3: Mobile Money Input */}
+        {step === 'momo_input' && (
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-500">Enter your phone number. You will receive a PIN prompt to authorize the payment to <span className="font-bold text-zinc-900 dark:text-white">{adminNumber}</span>.</p>
+            <input 
+              type="text"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="0708XXXXXX"
+              className="w-full bg-zinc-100 dark:bg-zinc-900 rounded-2xl py-4 px-4 font-bold text-lg outline-none border-2 border-transparent focus:border-yellow-500 transition-all"
+            />
+            <button
+              className="w-full rounded-2xl bg-yellow-500 py-4 font-black text-white uppercase tracking-widest shadow-lg shadow-yellow-500/20"
+              onClick={() => handleFinalizePayment('Mobile Money')}
+              disabled={phone.length < 10}
+            >
+              REQUEST PIN PROMPT
+            </button>
+          </div>
+        )}
+
+        {/* STEP 4: QR Display */}
+        {step === 'qr_display' && (
+          <div className="space-y-4 text-center">
+            <div className="relative mx-auto w-48 h-48 rounded-2xl overflow-hidden border-4 border-zinc-100 dark:border-zinc-800">
+              <Image 
+                src="/QR PAY.jpeg" 
+                alt="Payment QR" 
+                fill 
+                className="object-cover"
+              />
+            </div>
+            <p className="text-xs text-zinc-500 px-4 leading-relaxed">
+              Scan this QR code using your banking or Momo app. Money is sent directly to the admin account.
+            </p>
+            <button
+              className="w-full rounded-2xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-black py-4 font-black uppercase tracking-widest"
+              onClick={() => handleFinalizePayment('QR Code')}
+            >
+              I HAVE PAID
+            </button>
+          </div>
+        )}
+
+        {/* STEP 5: Processing / OTP Simulation */}
+        {step === 'processing' && (
+          <div className="py-10 text-center space-y-4">
+            <Loader2 className="h-12 w-12 text-violet-500 animate-spin mx-auto" />
+            <h4 className="text-lg font-bold">Waiting for PIN...</h4>
+            <p className="text-sm text-zinc-500 px-6">
+              A USSD push has been sent to <span className="font-bold">{phone || 'your phone'}</span>. Please enter your PIN to authorize the transfer to {adminNumber}.
+            </p>
+          </div>
+        )}
+
+        <button 
+          className="w-full py-4 text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 transition-colors uppercase tracking-widest mt-2"
+          onClick={onClose}
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );
