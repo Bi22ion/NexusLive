@@ -119,13 +119,11 @@ export function WalletHeader() {
 }) {
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const [amount, setAmount] = React.useState<number | string>(250);
-  // Steps: select_amount -> select_method -> (momo_input OR qr_display) -> processing
   const [step, setStep] = React.useState<'select_amount' | 'select_method' | 'momo_input' | 'qr_display' | 'processing'>('select_amount');
   const [phone, setPhone] = React.useState("");
   const [saving, setSaving] = React.useState(false);
 
   const finalAmount = Number(amount) || 0;
-  const adminNumber = "+256708109280"; // Your Airtel Revenue Number
 
   const handleFinalizePayment = async (method: string) => {
     if (!supabase) return;
@@ -136,40 +134,38 @@ export function WalletHeader() {
       const { data: auth } = await supabase.auth.getUser();
       const uid = auth.user?.id;
 
-      // 1. Record the transaction in the database
-      const { error: txError } = await supabase
-        .from("token_transactions")
-        .insert({
-          amount: finalAmount,
-          user_id: uid || null,
-          payment_method: method,
-          status: 'completed',
-          transaction_ref: method === 'Mobile Money' ? phone : 'QR_SCAN'
+      if (method === 'Mobile Money') {
+        // CALL THE REAL API ROUTE
+        const response = await fetch('/api/pay', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phoneNumber: phone.startsWith('0') ? `+256${phone.slice(1)}` : phone,
+            amount: finalAmount,
+            userId: uid
+          }),
         });
 
-      if (txError) throw txError;
+        const result = await response.json();
 
-      // 2. Update user wallet if logged in
-      if (uid) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("wallet_tokens")
-          .eq("id", uid)
-          .single();
+        if (!response.ok) {
+          throw new Error(result.error || 'Payment initiation failed');
+        }
 
-        const current = (profile as any)?.wallet_tokens ?? 0;
-        await supabase
-          .from("profiles")
-          .update({ wallet_tokens: current + finalAmount })
-          .eq("id", uid);
+        toast.info("PIN prompt sent! Tokens will be added once you authorize.");
+      } else {
+        // FOR QR CODE: Keep the manual flow or logic you had
+        toast.success("Request received. Admin will verify the QR payment.");
       }
 
-      toast.success(`Success! ${finalAmount} tokens added.`);
-      onSuccess(finalAmount);
-      onClose();
-    } catch (e) {
+      // Close the modal after triggering the prompt
+      setTimeout(() => {
+        onClose();
+      }, 3000);
+
+    } catch (e: any) {
       console.error(e);
-      toast.error("Payment failed to verify.");
+      toast.error(e.message || "Payment failed to verify.");
       setStep('select_method');
     } finally {
       setSaving(false);
@@ -185,11 +181,10 @@ export function WalletHeader() {
         className="w-full max-w-md h-fit rounded-3xl bg-white dark:bg-zinc-950 border border-white/10 p-6 shadow-2xl animate-in fade-in zoom-in duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header with Back Button */}
         <div className="flex items-center gap-3 mb-6">
           {step !== 'select_amount' && (
             <button 
-              onClick={() => setStep(step === 'processing' ? 'select_method' : 'select_method')}
+              onClick={() => setStep('select_method')}
               className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -244,7 +239,7 @@ export function WalletHeader() {
                 <Smartphone className="text-yellow-500" />
                 <div className="text-left">
                   <p className="font-bold">Mobile Money</p>
-                  <p className="text-[10px] text-zinc-500 uppercase">Airtel & MTN Uganda</p>
+                  <p className="text-[10px] text-zinc-500 uppercase">Airtel, MTN & All Networks</p>
                 </div>
               </div>
             </button>
@@ -267,20 +262,22 @@ export function WalletHeader() {
         {/* STEP 3: Mobile Money Input */}
         {step === 'momo_input' && (
           <div className="space-y-4">
-            <p className="text-sm text-zinc-500">Enter your phone number. You will receive a PIN prompt to authorize the payment to <span className="font-bold text-zinc-900 dark:text-white">{adminNumber}</span>.</p>
+            <p className="text-sm text-zinc-500 leading-relaxed">
+              Enter your mobile money number. You will receive a secure PIN prompt on your phone to authorize this refill.
+            </p>
             <input 
               type="text"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="0708XXXXXX"
+              placeholder="07xxxxxxxx"
               className="w-full bg-zinc-100 dark:bg-zinc-900 rounded-2xl py-4 px-4 font-bold text-lg outline-none border-2 border-transparent focus:border-yellow-500 transition-all"
             />
             <button
-              className="w-full rounded-2xl bg-yellow-500 py-4 font-black text-white uppercase tracking-widest shadow-lg shadow-yellow-500/20"
+              className="w-full rounded-2xl bg-yellow-500 py-4 font-black text-white uppercase tracking-widest shadow-lg shadow-yellow-500/20 disabled:opacity-50"
               onClick={() => handleFinalizePayment('Mobile Money')}
-              disabled={phone.length < 10}
+              disabled={phone.length < 10 || saving}
             >
-              REQUEST PIN PROMPT
+              {saving ? <Loader2 className="animate-spin mx-auto" /> : "REQUEST PIN PROMPT"}
             </button>
           </div>
         )}
@@ -297,7 +294,7 @@ export function WalletHeader() {
               />
             </div>
             <p className="text-xs text-zinc-500 px-4 leading-relaxed">
-              Scan this QR code using your banking or Momo app. Money is sent directly to the admin account.
+              Scan this QR code using your banking or Momo app.
             </p>
             <button
               className="w-full rounded-2xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-black py-4 font-black uppercase tracking-widest"
@@ -308,13 +305,13 @@ export function WalletHeader() {
           </div>
         )}
 
-        {/* STEP 5: Processing / OTP Simulation */}
+        {/* STEP 5: Processing */}
         {step === 'processing' && (
           <div className="py-10 text-center space-y-4">
             <Loader2 className="h-12 w-12 text-violet-500 animate-spin mx-auto" />
             <h4 className="text-lg font-bold">Waiting for PIN...</h4>
             <p className="text-sm text-zinc-500 px-6">
-              A USSD push has been sent to <span className="font-bold">{phone || 'your phone'}</span>. Please enter your PIN to authorize the transfer to {adminNumber}.
+              A secure push has been sent to <span className="font-bold">{phone}</span>. Please authorize the transaction on your phone.
             </p>
           </div>
         )}
