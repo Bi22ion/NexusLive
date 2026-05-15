@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import * as React from "react";
 import { Coins, Gem, Plus, X } from "lucide-react";
