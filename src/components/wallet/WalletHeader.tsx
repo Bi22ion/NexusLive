@@ -109,7 +109,7 @@ export function WalletHeader() {
   );
 }
 
-   function BuyTokensModal({
+    function BuyTokensModal({
   onClose,
   onSuccess,
 }: {
@@ -182,7 +182,7 @@ export function WalletHeader() {
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="w-full bg-zinc-100 dark:bg-zinc-900 border-none rounded-2xl py-4 px-4 font-bold text-lg focus:ring-2 focus:ring-violet-500 outline-none transition-all"
+              className="w-full bg-zinc-100 dark:bg-zinc-900 border-none rounded-2xl py-4 px-4 font-bold text-lg focus:ring-2 focus:ring-violet-500 outline-none transition-all text-zinc-900 dark:text-white"
               placeholder="0"
             />
           </div>
@@ -193,6 +193,9 @@ export function WalletHeader() {
               className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-cyan-500 py-4 font-black text-white uppercase tracking-widest hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg shadow-violet-500/20"
               disabled={saving || finalAmount <= 0}
               onClick={async () => {
+                // FIXED: Safety guard for TypeScript build error
+                if (!supabase) return;
+                
                 setSaving(true);
                 try {
                   const { data: auth } = await supabase.auth.getUser();
@@ -219,6 +222,7 @@ export function WalletHeader() {
                   onClose();
                 } catch (e) {
                   console.error("Payment failed", e);
+                  toast.error("Transaction could not be recorded.");
                 } finally {
                   setSaving(false);
                 }
