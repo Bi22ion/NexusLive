@@ -109,7 +109,7 @@ export function WalletHeader() {
   );
 }
 
-function BuyTokensModal({
+ function BuyTokensModal({
   onClose,
   onSuccess,
 }: {
@@ -121,8 +121,19 @@ function BuyTokensModal({
   const [saving, setSaving] = React.useState(false);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-zinc-950 border border-black/10 dark:border-white/10 p-4">
+    /* The outer div is the backdrop. clicking it calls onClose */
+    <div 
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      {/* The inner div is the modal. 
+          onClick={(e) => e.stopPropagation()} prevents the backdrop's 
+          onClick from firing when you click inside the modal.
+      */}
+      <div 
+        className="w-full max-w-md rounded-2xl bg-white dark:bg-zinc-950 border border-black/10 dark:border-white/10 p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between">
           <div className="text-base font-semibold">Buy Tokens (simulated)</div>
           <button
@@ -142,7 +153,7 @@ function BuyTokensModal({
             {[100, 250, 500].map((v) => (
               <button
                 key={v}
-                className={`rounded-xl border px-3 py-2 text-sm font-semibold ${
+                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
                   amount === v
                     ? "border-transparent bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
                     : "border-black/10 dark:border-white/10 hover:bg-black/[0.03] dark:hover:bg-white/[0.06]"
@@ -156,7 +167,7 @@ function BuyTokensModal({
           </div>
 
           <button
-            className="mt-2 w-full rounded-xl bg-gradient-to-r from-violet-500 to-cyan-400 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+            className="mt-2 w-full rounded-xl bg-gradient-to-r from-violet-500 to-cyan-400 px-4 py-3 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-60"
             disabled={saving}
             onClick={async () => {
               if (!supabase) return toast.error("Missing Supabase env vars");
@@ -169,7 +180,6 @@ function BuyTokensModal({
                   return;
                 }
 
-                // Simple demo: update profiles.wallet_tokens (assumes RLS allows self update).
                 const { data, error } = await supabase
                   .from("profiles")
                   .select("wallet_tokens")
@@ -197,11 +207,10 @@ function BuyTokensModal({
             }}
             type="button"
           >
-            Simulate Payment
+            {saving ? "Processing..." : "Simulate Payment"}
           </button>
         </div>
       </div>
     </div>
   );
 }
-
