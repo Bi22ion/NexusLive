@@ -5,8 +5,8 @@ import { Coins, Gem, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
-// Moving the packages out of the JSX completely to avoid Turbopack parsing bugs
-const TOKEN_PACKAGES =;
+// Add the array values here
+const TOKEN_PACKAGES = [100, 250, 500, 1000, 2500, 5000]; 
 
 type ProfileRow = {
   id: string;
