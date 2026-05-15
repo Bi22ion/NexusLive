@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import { Coins, Gem, Plus, X } from "lucide-react";
@@ -78,7 +78,7 @@ export function WalletHeader() {
         )}
         <span className="text-xs text-zinc-600 dark:text-zinc-400">{label}</span>
         <span className="text-sm font-semibold tabular-nums">
-          {loading ? "�" : safeValue.toLocaleString()}
+          {loading ? "…" : safeValue.toLocaleString()}
         </span>
       </div>
 
@@ -186,7 +186,7 @@ function BuyTokensModal({
                 if (error) throw error;
 
                 const current = (data as any)?.wallet_tokens ?? 0;
-const { error: upErr } = await supabase
+                const { error: upErr } = await supabase
                   .from("profiles")
                   .update({ wallet_tokens: current + amount })
                   .eq("id", uid);
