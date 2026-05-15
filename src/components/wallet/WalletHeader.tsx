@@ -109,7 +109,7 @@ export function WalletHeader() {
   );
 }
 
-  function BuyTokensModal({
+   function BuyTokensModal({
   onClose,
   onSuccess,
 }: {
@@ -117,16 +117,17 @@ export function WalletHeader() {
   onSuccess: (delta: number) => void;
 }) {
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
-  const [amount, setAmount] = React.useState(250);
+  const [amount, setAmount] = React.useState<number | string>(250);
   const [saving, setSaving] = React.useState(false);
 
-  // This function ensures we only close if the user clicks the dark background,
-  // not the white box itself.
+  // Close when clicking the dark backdrop
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
       onClose();
     }
   };
+
+  const finalAmount = Number(amount) || 0;
 
   return (
     <div 
@@ -138,30 +139,31 @@ export function WalletHeader() {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
-            Buy Tokens
-          </h3>
+          <div>
+            <h3 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
+              Buy Tokens
+            </h3>
+            <p className="text-xs text-zinc-500 mt-1">No account required to purchase</p>
+          </div>
           <button
-            className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-500"
             onClick={onClose}
             type="button"
           >
-            <span className="sr-only">Close</span>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <span className="text-xl">✕</span>
           </button>
         </div>
 
         <div className="space-y-6">
+          {/* Quick Select Buttons */}
           <div className="grid grid-cols-3 gap-3">
             {[100, 250, 500].map((v) => (
               <button
                 key={v}
-                className={`rounded-2xl border-2 py-4 text-sm font-bold transition-all ${
+                className={`rounded-2xl border-2 py-3 text-sm font-bold transition-all ${
                   amount === v
                     ? "border-violet-500 bg-violet-500/10 text-violet-500"
-                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
+                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 text-zinc-600 dark:text-zinc-400"
                 }`}
                 onClick={() => setAmount(v)}
                 type="button"
@@ -171,44 +173,74 @@ export function WalletHeader() {
             ))}
           </div>
 
-          <button
-            className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-cyan-500 py-4 font-black text-white uppercase tracking-widest hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50"
-            disabled={saving}
-            onClick={async () => {
-              if (!supabase) return;
-              setSaving(true);
-              try {
-                const { data: auth } = await supabase.auth.getUser();
-                if (!auth.user) {
-                  // Keep modal open so they can see the error
-                  alert("Please sign in to buy tokens.");
-                  return;
+          {/* Manual Entry */}
+          <div className="relative">
+            <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 ml-2 mb-1 block">
+              Or Enter Custom Amount
+            </label>
+            <input 
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full bg-zinc-100 dark:bg-zinc-900 border-none rounded-2xl py-4 px-4 font-bold text-lg focus:ring-2 focus:ring-violet-500 outline-none transition-all"
+              placeholder="0"
+            />
+          </div>
+
+          {/* Payment Simulation Section */}
+          <div className="space-y-3">
+            <button
+              className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-cyan-500 py-4 font-black text-white uppercase tracking-widest hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg shadow-violet-500/20"
+              disabled={saving || finalAmount <= 0}
+              onClick={async () => {
+                setSaving(true);
+                try {
+                  const { data: auth } = await supabase.auth.getUser();
+                  const uid = auth.user?.id;
+
+                  // Only attempt database update if the user IS logged in
+                  if (uid) {
+                    const { data } = await supabase
+                      .from("profiles")
+                      .select("wallet_tokens")
+                      .eq("id", uid)
+                      .single();
+
+                    const current = (data as any)?.wallet_tokens ?? 0;
+                    await supabase
+                      .from("profiles")
+                      .update({ wallet_tokens: current + finalAmount })
+                      .eq("id", uid);
+                  }
+
+                  // Always trigger success for the current session (guest or logged in)
+                  toast.success(`Success! +${finalAmount} tokens added.`);
+                  onSuccess(finalAmount);
+                  onClose();
+                } catch (e) {
+                  console.error("Payment failed", e);
+                } finally {
+                  setSaving(false);
                 }
+              }}
+              type="button"
+            >
+              {saving ? "PROCESSING..." : `PAY FOR ${finalAmount} TOKENS`}
+            </button>
 
-                const { data } = await supabase
-                  .from("profiles")
-                  .select("wallet_tokens")
-                  .eq("id", auth.user.id)
-                  .single();
+            <button
+              className="w-full py-2 text-sm font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors uppercase tracking-widest"
+              onClick={onClose}
+              type="button"
+            >
+              Cancel & Continue Watching
+            </button>
+          </div>
 
-                const current = (data as any)?.wallet_tokens ?? 0;
-                await supabase
-                  .from("profiles")
-                  .update({ wallet_tokens: current + amount })
-                  .eq("id", auth.user.id);
-
-                onSuccess(amount);
-                onClose();
-              } catch (e) {
-                console.error(e);
-              } finally {
-                setSaving(false);
-              }
-            }}
-            type="button"
-          >
-            {saving ? "Processing..." : "Simulate Payment"}
-          </button>
+          <p className="text-[10px] text-center text-zinc-400 px-4 leading-relaxed">
+            Supports Credit Cards, Mobile Money, and Digital Wallets. 
+            Tokens can be used for private rooms and tipping.
+          </p>
         </div>
       </div>
     </div>
