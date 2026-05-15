@@ -109,7 +109,7 @@ export function WalletHeader() {
   );
 }
 
-    function BuyTokensModal({
+ function BuyTokensModal({
   onClose,
   onSuccess,
 }: {
@@ -118,134 +118,137 @@ export function WalletHeader() {
 }) {
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const [amount, setAmount] = React.useState<number | string>(250);
+  const [step, setStep] = React.useState<'select_amount' | 'select_method'>('select_amount');
   const [saving, setSaving] = React.useState(false);
-
-  // Close when clicking the dark backdrop
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
 
   const finalAmount = Number(amount) || 0;
 
+  // Handles the actual final "payment" processing
+  const processPayment = async (method: string) => {
+    if (!supabase) return;
+    setSaving(true);
+    
+    try {
+      // In a production environment, this is where you would call 
+      // Stripe, Flutterwave (for Mobile Money), or PayPal APIs.
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth.user?.id;
+
+      // We log the transaction officially
+      const { error: txError } = await supabase
+        .from("token_transactions")
+        .insert({
+          amount: finalAmount,
+          user_id: uid || null,
+          payment_method: method,
+          status: 'completed'
+        });
+
+      if (txError) throw txError;
+
+      if (uid) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("wallet_tokens")
+          .eq("id", uid)
+          .single();
+
+        const current = (profile as any)?.wallet_tokens ?? 0;
+        await supabase
+          .from("profiles")
+          .update({ wallet_tokens: current + finalAmount })
+          .eq("id", uid);
+      }
+
+      toast.success(`Success! ${finalAmount} tokens added via ${method}.`);
+      onSuccess(finalAmount);
+      onClose();
+    } catch (e) {
+      console.error(e);
+      toast.error("Payment provider rejected the transaction.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div 
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-md p-4 cursor-pointer"
-      onClick={handleBackdropClick}
+      className="fixed inset-0 z-[9999] flex justify-center bg-black/60 backdrop-blur-sm p-4 pt-20"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div 
-        className="w-full max-w-md rounded-3xl bg-white dark:bg-zinc-950 border border-white/10 p-6 shadow-2xl cursor-default"
+        className="w-full max-w-md h-fit rounded-3xl bg-white dark:bg-zinc-950 border border-white/10 p-6 shadow-2xl animate-in fade-in zoom-in duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
-              Buy Tokens
-            </h3>
-            <p className="text-xs text-zinc-500 mt-1">No account required to purchase</p>
-          </div>
-          <button
-            className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-500"
-            onClick={onClose}
-            type="button"
-          >
-            <span className="text-xl">✕</span>
+          <h3 className="text-xl font-bold text-zinc-900 dark:text-white">
+            {step === 'select_amount' ? 'Refill Tokens' : 'Secure Checkout'}
+          </h3>
+          <button onClick={onClose} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full">
+            <span className="text-xl text-zinc-500">✕</span>
           </button>
         </div>
 
-        <div className="space-y-6">
-          {/* Quick Select Buttons */}
-          <div className="grid grid-cols-3 gap-3">
-            {[100, 250, 500].map((v) => (
-              <button
-                key={v}
-                className={`rounded-2xl border-2 py-3 text-sm font-bold transition-all ${
-                  amount === v
-                    ? "border-violet-500 bg-violet-500/10 text-violet-500"
-                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 text-zinc-600 dark:text-zinc-400"
-                }`}
-                onClick={() => setAmount(v)}
-                type="button"
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-
-          {/* Manual Entry */}
-          <div className="relative">
-            <label className="text-[10px] uppercase font-black tracking-widest text-zinc-500 ml-2 mb-1 block">
-              Or Enter Custom Amount
-            </label>
+        {step === 'select_amount' ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-3 gap-3">
+              {[100, 250, 500].map((v) => (
+                <button
+                  key={v}
+                  className={`rounded-2xl border-2 py-3 font-bold transition-all ${
+                    amount === v ? "border-violet-500 bg-violet-500/10 text-violet-500" : "border-zinc-200 dark:border-zinc-800"
+                  }`}
+                  onClick={() => setAmount(v)}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+            
             <input 
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="w-full bg-zinc-100 dark:bg-zinc-900 border-none rounded-2xl py-4 px-4 font-bold text-lg focus:ring-2 focus:ring-violet-500 outline-none transition-all text-zinc-900 dark:text-white"
-              placeholder="0"
+              className="w-full bg-zinc-100 dark:bg-zinc-900 rounded-2xl py-4 px-4 font-bold text-lg outline-none focus:ring-2 focus:ring-violet-500"
+              placeholder="Custom amount"
             />
-          </div>
-
-          {/* Payment Simulation Section */}
-          <div className="space-y-3">
-            <button
-              className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-cyan-500 py-4 font-black text-white uppercase tracking-widest hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg shadow-violet-500/20"
-              disabled={saving || finalAmount <= 0}
-              onClick={async () => {
-                // FIXED: Safety guard for TypeScript build error
-                if (!supabase) return;
-                
-                setSaving(true);
-                try {
-                  const { data: auth } = await supabase.auth.getUser();
-                  const uid = auth.user?.id;
-
-                  // Only attempt database update if the user IS logged in
-                  if (uid) {
-                    const { data } = await supabase
-                      .from("profiles")
-                      .select("wallet_tokens")
-                      .eq("id", uid)
-                      .single();
-
-                    const current = (data as any)?.wallet_tokens ?? 0;
-                    await supabase
-                      .from("profiles")
-                      .update({ wallet_tokens: current + finalAmount })
-                      .eq("id", uid);
-                  }
-
-                  // Always trigger success for the current session (guest or logged in)
-                  toast.success(`Success! +${finalAmount} tokens added.`);
-                  onSuccess(finalAmount);
-                  onClose();
-                } catch (e) {
-                  console.error("Payment failed", e);
-                  toast.error("Transaction could not be recorded.");
-                } finally {
-                  setSaving(false);
-                }
-              }}
-              type="button"
-            >
-              {saving ? "PROCESSING..." : `PAY FOR ${finalAmount} TOKENS`}
-            </button>
 
             <button
-              className="w-full py-2 text-sm font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors uppercase tracking-widest"
-              onClick={onClose}
-              type="button"
+              className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-cyan-500 py-4 font-black text-white uppercase tracking-widest"
+              onClick={() => setStep('select_method')}
+              disabled={finalAmount <= 0}
             >
-              Cancel & Continue Watching
+              Continue to Payment
             </button>
           </div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-zinc-500 mb-4 text-center">Total Amount: <span className="text-zinc-900 dark:text-white font-bold">{finalAmount} Tokens</span></p>
+            
+            {[
+              { id: 'mobile_money', label: 'Mobile Money', color: 'bg-yellow-500' },
+              { id: 'card', label: 'Credit / Debit Card', color: 'bg-blue-600' },
+              { id: 'paypal', label: 'PayPal', color: 'bg-blue-800' }
+            ].map((method) => (
+              <button
+                key={method.id}
+                disabled={saving}
+                className={`w-full flex items-center justify-between p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors disabled:opacity-50`}
+                onClick={() => processPayment(method.label)}
+              >
+                <span className="font-bold">{method.label}</span>
+                <div className={`w-3 h-3 rounded-full ${method.color}`} />
+              </button>
+            ))}
 
-          <p className="text-[10px] text-center text-zinc-400 px-4 leading-relaxed">
-            Supports Credit Cards, Mobile Money, and Digital Wallets. 
-            Tokens can be used for private rooms and tipping.
-          </p>
-        </div>
+            <button 
+              className="w-full text-zinc-500 text-xs font-bold uppercase mt-4"
+              onClick={() => setStep('select_amount')}
+            >
+              ← Back to Amount
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
