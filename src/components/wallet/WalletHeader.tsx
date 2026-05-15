@@ -1,12 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Coins, Gem, Plus, X } from "lucide-react";
+import { Coins, Gem, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-
-// Add the array values here
-const TOKEN_PACKAGES = [100, 250, 500, 1000, 2500, 5000]; 
 
 type ProfileRow = {
   id: string;
@@ -87,7 +84,7 @@ export function WalletHeader() {
 
       {!isHost ? (
         <button
-          className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 px-3 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-500/20 transition-transform active:scale-95"
+          className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 px-3 py-2 text-sm font-semibold text-white"
           onClick={() => setBuyOpen(true)}
           type="button"
         >
@@ -124,54 +121,45 @@ function BuyTokensModal({
   const [saving, setSaving] = React.useState(false);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md overflow-hidden rounded-[40px] border border-white/10 bg-neutral-950 p-8 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="relative text-center">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white dark:bg-zinc-950 border border-black/10 dark:border-white/10 p-4">
+        <div className="flex items-center justify-between">
+          <div className="text-base font-semibold">Buy Tokens (simulated)</div>
           <button
+            className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50"
             onClick={onClose}
-            className="absolute -right-2 -top-2 rounded-full bg-white/5 p-2 text-neutral-400 hover:text-white"
+            type="button"
           >
-            <X className="h-4 w-4" />
+            Close
           </button>
+        </div>
 
-          <h2 className="text-3xl font-black italic tracking-tighter text-white uppercase">
-            Top Up Tokens
-          </h2>
-          <p className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-neutral-500">
-            Select your package
-          </p>
-
-          <div className="mt-10 grid grid-cols-3 gap-4">
-            {TOKEN_PACKAGES.map((v) => (
+        <div className="mt-4 space-y-3">
+          <label className="block text-sm text-zinc-600 dark:text-zinc-400">
+            Amount
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {[100, 250, 500].map((v) => (
               <button
                 key={v}
-                className={`flex flex-col items-center justify-center rounded-[24px] border-2 py-6 transition-all duration-300 ${
+                className={`rounded-xl border px-3 py-2 text-sm font-semibold ${
                   amount === v
-                    ? "border-violet-600 bg-violet-600/10 text-white shadow-[0_0_30px_rgba(139,92,246,0.3)]"
-                    : "border-white/5 bg-neutral-900/40 text-neutral-500 hover:border-white/10"
+                    ? "border-transparent bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
+                    : "border-black/10 dark:border-white/10 hover:bg-black/[0.03] dark:hover:bg-white/[0.06]"
                 }`}
                 onClick={() => setAmount(v)}
                 type="button"
               >
-                <span className="text-2xl font-black">{v}</span>
-                <span className="text-[10px] font-bold uppercase tracking-widest opacity-60">
-                  Tokens
-                </span>
+                {v}
               </button>
             ))}
           </div>
 
           <button
-            className="mt-10 w-full rounded-[24px] bg-gradient-to-r from-violet-600 to-cyan-500 py-6 text-sm font-black uppercase tracking-[0.2em] text-white hover:opacity-90 transition-all active:scale-[0.97] disabled:opacity-50"
+            className="mt-2 w-full rounded-xl bg-gradient-to-r from-violet-500 to-cyan-400 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
             disabled={saving}
             onClick={async () => {
-              if (!supabase) return toast.error("Missing Supabase client");
+              if (!supabase) return toast.error("Missing Supabase env vars");
               setSaving(true);
               try {
                 const { data: auth } = await supabase.auth.getUser();
@@ -181,6 +169,7 @@ function BuyTokensModal({
                   return;
                 }
 
+                // Simple demo: update profiles.wallet_tokens (assumes RLS allows self update).
                 const { data, error } = await supabase
                   .from("profiles")
                   .select("wallet_tokens")
@@ -195,11 +184,11 @@ function BuyTokensModal({
                   .eq("id", uid);
                 if (upErr) throw upErr;
 
-                toast.success(`Success! +${amount} tokens added.`);
+                toast.success(`Payment success: +${amount} tokens`);
                 onSuccess(amount);
                 onClose();
               } catch (e: any) {
-                toast.error("Purchase failed", {
+                toast.error("Token purchase failed", {
                   description: e?.message ?? "Unknown error",
                 });
               } finally {
@@ -208,10 +197,11 @@ function BuyTokensModal({
             }}
             type="button"
           >
-            {saving ? "Processing..." : "Simulate Payment"}
+            Simulate Payment
           </button>
         </div>
       </div>
     </div>
   );
 }
+
