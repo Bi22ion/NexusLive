@@ -109,7 +109,7 @@ export function WalletHeader() {
   );
 }
 
- function BuyTokensModal({
+  function BuyTokensModal({
   onClose,
   onSuccess,
 }: {
@@ -120,43 +120,48 @@ export function WalletHeader() {
   const [amount, setAmount] = React.useState(250);
   const [saving, setSaving] = React.useState(false);
 
+  // This function ensures we only close if the user clicks the dark background,
+  // not the white box itself.
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    /* The outer div is the backdrop. clicking it calls onClose */
     <div 
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      onClick={onClose}
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-md p-4 cursor-pointer"
+      onClick={handleBackdropClick}
     >
-      {/* The inner div is the modal. 
-          onClick={(e) => e.stopPropagation()} prevents the backdrop's 
-          onClick from firing when you click inside the modal.
-      */}
       <div 
-        className="w-full max-w-md rounded-2xl bg-white dark:bg-zinc-950 border border-black/10 dark:border-white/10 p-6 shadow-2xl"
+        className="w-full max-w-md rounded-3xl bg-white dark:bg-zinc-950 border border-white/10 p-6 shadow-2xl cursor-default"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between">
-          <div className="text-base font-semibold">Buy Tokens (simulated)</div>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
+            Buy Tokens
+          </h3>
           <button
-            className="text-sm text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-50"
+            className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
             onClick={onClose}
             type="button"
           >
-            Close
+            <span className="sr-only">Close</span>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
-        <div className="mt-4 space-y-3">
-          <label className="block text-sm text-zinc-600 dark:text-zinc-400">
-            Amount
-          </label>
-          <div className="grid grid-cols-3 gap-2">
+        <div className="space-y-6">
+          <div className="grid grid-cols-3 gap-3">
             {[100, 250, 500].map((v) => (
               <button
                 key={v}
-                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-all ${
+                className={`rounded-2xl border-2 py-4 text-sm font-bold transition-all ${
                   amount === v
-                    ? "border-transparent bg-gradient-to-r from-violet-500 to-cyan-400 text-white"
-                    : "border-black/10 dark:border-white/10 hover:bg-black/[0.03] dark:hover:bg-white/[0.06]"
+                    ? "border-violet-500 bg-violet-500/10 text-violet-500"
+                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
                 }`}
                 onClick={() => setAmount(v)}
                 type="button"
@@ -167,40 +172,35 @@ export function WalletHeader() {
           </div>
 
           <button
-            className="mt-2 w-full rounded-xl bg-gradient-to-r from-violet-500 to-cyan-400 px-4 py-3 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-60"
+            className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-cyan-500 py-4 font-black text-white uppercase tracking-widest hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50"
             disabled={saving}
             onClick={async () => {
-              if (!supabase) return toast.error("Missing Supabase env vars");
+              if (!supabase) return;
               setSaving(true);
               try {
                 const { data: auth } = await supabase.auth.getUser();
-                const uid = auth.user?.id;
-                if (!uid) {
-                  toast.error("Sign in required");
+                if (!auth.user) {
+                  // Keep modal open so they can see the error
+                  alert("Please sign in to buy tokens.");
                   return;
                 }
 
-                const { data, error } = await supabase
+                const { data } = await supabase
                   .from("profiles")
                   .select("wallet_tokens")
-                  .eq("id", uid)
+                  .eq("id", auth.user.id)
                   .single();
-                if (error) throw error;
 
                 const current = (data as any)?.wallet_tokens ?? 0;
-                const { error: upErr } = await supabase
+                await supabase
                   .from("profiles")
                   .update({ wallet_tokens: current + amount })
-                  .eq("id", uid);
-                if (upErr) throw upErr;
+                  .eq("id", auth.user.id);
 
-                toast.success(`Payment success: +${amount} tokens`);
                 onSuccess(amount);
                 onClose();
-              } catch (e: any) {
-                toast.error("Token purchase failed", {
-                  description: e?.message ?? "Unknown error",
-                });
+              } catch (e) {
+                console.error(e);
               } finally {
                 setSaving(false);
               }
