@@ -1,9 +1,12 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import { Coins, Gem, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+
+// Moving the packages out of the JSX completely to avoid Turbopack parsing bugs
+const TOKEN_PACKAGES =;
 
 type ProfileRow = {
   id: string;
@@ -78,7 +81,7 @@ export function WalletHeader() {
         )}
         <span className="text-xs text-zinc-600 dark:text-zinc-400">{label}</span>
         <span className="text-sm font-semibold tabular-nums">
-          {loading ? "�" : safeValue.toLocaleString()}
+          {loading ? "…" : safeValue.toLocaleString()}
         </span>
       </div>
 
@@ -145,7 +148,7 @@ function BuyTokensModal({
           </p>
 
           <div className="mt-10 grid grid-cols-3 gap-4">
-            {.map((v) => (
+            {TOKEN_PACKAGES.map((v) => (
               <button
                 key={v}
                 className={`flex flex-col items-center justify-center rounded-[24px] border-2 py-6 transition-all duration-300 ${
