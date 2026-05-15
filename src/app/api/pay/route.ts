@@ -1,27 +1,43 @@
+import { NextRequest, NextResponse } from 'next/server';
+// @ts-ignore
 import AfricasTalking from 'africastalking';
 
-const at = AfricasTalking({
-  apiKey: process.env.AT_API_KEY!,
-  username: process.env.AT_USERNAME!
-});
-
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const { phoneNumber, amount, userId } = await req.json();
 
-    const result = await at.PAYMENTS.mobileCheckout({
-      productName: 'NexusLiveTokens', // MUST match the name in your Africa's Talking dashboard
-      phoneNumber: phoneNumber,      // e.g. +2567...
+    // 1. Initialize the SDK inside the handler to ensure env vars are loaded
+    const at = AfricasTalking({
+      apiKey: process.env.AT_API_KEY || '',
+      username: process.env.AT_USERNAME || 'sandbox',
+    });
+
+    // 2. Access the payments service
+    const payments = at.PAYMENTS;
+
+    if (!payments) {
+      throw new Error("Africa's Talking Payments service not initialized");
+    }
+
+    // 3. Trigger the checkout
+    const result = await payments.mobileCheckout({
+      productName: 'NexusLiveTokens', // Must match your AT Dashboard product name
+      phoneNumber: phoneNumber,
       currencyCode: 'UGX',
       amount: Number(amount),
       metadata: {
-        userId: userId               // Passes your Supabase User ID so we know who to give tokens to
-      }
+        userId: userId,
+      },
     });
 
-    return Response.json(result);
+    console.log('Payment Result:', result);
+
+    return NextResponse.json({ success: true, result });
   } catch (error: any) {
-    console.error('Payment Trigger Error:', error);
-    return Response.json({ error: error.message }, { status: 500 });
+    console.error('Payment Error:', error);
+    return NextResponse.json(
+      { error: error.message || 'Internal Server Error' },
+      { status: 500 }
+    );
   }
 }
